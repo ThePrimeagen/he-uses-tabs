@@ -375,7 +375,6 @@ async fn main() {
 						}
 
 						let finish = Instant::now();
-						let processing_time = finish - start;
 
 						lastloop = start;
 						first_frame = false;
