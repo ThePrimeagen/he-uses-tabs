@@ -287,11 +287,9 @@ async fn main() {
 
 			// Combine both message sources into one
 			let streama = futures::StreamExt::map(streama, |x| {
-                println!("stream a message");
                 return (b'a', x);
             });
 			let streamb = futures::StreamExt::map(streamb, |x| {
-                println!("stream b message");
                 return (b'b', x);
             });
 			let mut merged_messages = streama.merge(streamb);
@@ -351,11 +349,6 @@ async fn main() {
 							bullet.update(delta);
 						}
 
-                        println!("Bullets: {:?}\n", state.bullets
-                            .iter()
-                            .map(|b| (b.aabb.x, b.aabb.y))
-                            .collect::<Vec::<(f32, f32)>>());
-
 						// Check for bullet collisions
 						// This is duplicating the logic of the Go code - which can only handle max 1 collision per game loop...
 						'outer: for a in 0..state.bullets.len() {
@@ -365,7 +358,6 @@ async fn main() {
 								if !bullet_a.aabb.collides(&bullet_b.aabb) {
 									continue;
 								}
-                                println!("Bullet#collision {:?} and {:?}\n", a, b);
 								state.bullets.swap_remove(b);
 								state.bullets.swap_remove(a);
 								break 'outer;
