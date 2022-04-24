@@ -234,38 +234,40 @@ async fn main() {
 			let (mut sinka, mut streama) = wsa.split();
 			let (mut sinkb, mut streamb) = wsb.split();
 
+            // 1. Wait for ready
 			// Exchange ready-up messages
 			tokio::join!(
 				wait_for_ready(&mut streama, &mut sinka),
 				wait_for_ready(&mut streamb, &mut sinkb)
 			);
 
+            // 2. create game initial state
 			let mut state = GameState {
-				player_a: Player {
+                player_a: Player {
                     id: 1,
-					geo: AABB {
-						x: 2500.0,
-						y: 0.0,
-						w: PLAYER_WIDTH,
-						h: PLAYER_HEIGHT,
-					},
-					dir: Vec2D(-1.0, 0.0),
-					reload_time: 180,
-					last_fired: None,
-				},
-				player_b: Player {
+                    geo: AABB {
+                        x: 2500.0,
+                        y: 0.0,
+                        w: PLAYER_WIDTH,
+                        h: PLAYER_HEIGHT,
+                    },
+                    dir: Vec2D(-1.0, 0.0),
+                    reload_time: 180,
+                    last_fired: None,
+                },
+                player_b: Player {
                     id: 2,
-					geo: AABB {
-						x: -2500.0,
-						y: 0.0,
-						w: PLAYER_WIDTH,
-						h: PLAYER_HEIGHT,
-					},
-					dir: Vec2D(1.0, 0.0),
-					reload_time: 300,
-					last_fired: None,
-				},
-				bullets: Vec::new(),
+                    geo: AABB {
+                        x: -2500.0,
+                        y: 0.0,
+                        w: PLAYER_WIDTH,
+                        h: PLAYER_HEIGHT,
+                    },
+                    dir: Vec2D(1.0, 0.0),
+                    reload_time: 300,
+                    last_fired: None,
+                },
+                bullets: Vec::new(),
 			};
 
             let mut stats = GameStats::new();
