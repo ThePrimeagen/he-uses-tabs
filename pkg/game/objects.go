@@ -88,8 +88,10 @@ func CreateBulletFromPlayer(player *Player, speed float64) Bullet {
     return bullet
 }
 
-func Update(b *Bullet, xDelta, yDelta float64) {
-    b.Geo.X += xDelta
-    b.Geo.Y += yDelta
+func UpdateBullet(b *Bullet, delta int64) {
+    millis := delta / 1000;
+
+    b.Geo.X += millis * b.Vel[0]
+    b.Geo.Y += millis * b.Vel[1]
 }
 
