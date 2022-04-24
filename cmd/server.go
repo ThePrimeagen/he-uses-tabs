@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/websocket"
+	"github.com/theprimeagen/he-uses-tabs/pkg/game"
 )
 
 var addr = flag.String("addr", "0.0.0.0:42069", "http service address")
@@ -16,6 +17,10 @@ func main() {
 	log.SetFlags(0)
 
     conns := make(chan *websocket.Conn, 10)// *server.Conn, 10)
+
+    go func() {
+        game.RunGame(conns)
+    }()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
         c, err := upgrader.Upgrade(w, r, nil)

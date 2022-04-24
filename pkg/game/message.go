@@ -3,8 +3,6 @@ package game
 import (
 	"fmt"
 	"sync/atomic"
-
-	"github.com/gorilla/websocket"
 )
 
 const (

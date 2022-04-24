@@ -37,8 +37,8 @@ const PLAYER_HEIGHT = 100
 const BULLET_WIDTH = 35
 const BULLET_HEIGHT = 3
 
-func NewPlayer(pos, dir Vector2D, fireRate int64) Player {
-    return Player {
+func NewPlayer(pos, dir Vector2D, fireRate int64) *Player {
+    return &Player {
         Geo: AABB {
             X: pos[0],
             Y: pos[1],
@@ -51,7 +51,7 @@ func NewPlayer(pos, dir Vector2D, fireRate int64) Player {
     }
 }
 
-func Fire(p *Player) bool {
+func PlayerFire(p *Player) bool {
     now := time.Now().UnixMilli()
 
     if p.FireRate > now - p.lastFireTime {
@@ -69,7 +69,7 @@ func NewBullet() Bullet {
     }
 }
 
-func CreateBulletFromPlayer(player *Player, speed float64) Bullet {
+func CreateBulletFromPlayer(player *Player, speed float64) *Bullet {
     bullet := NewBullet()
 
     if player.Dir[0] == 1 {
@@ -85,13 +85,13 @@ func CreateBulletFromPlayer(player *Player, speed float64) Bullet {
     bullet.Vel[0] = player.Dir[0] * speed;
     bullet.Vel[1] = player.Dir[1] * speed;
 
-    return bullet
+    return &bullet
 }
 
 func UpdateBullet(b *Bullet, delta int64) {
     millis := delta / 1000;
 
-    b.Geo.X += millis * b.Vel[0]
-    b.Geo.Y += millis * b.Vel[1]
+    b.Geo.X += float64(millis) * b.Vel[0]
+    b.Geo.Y += float64(millis) * b.Vel[1]
 }
 

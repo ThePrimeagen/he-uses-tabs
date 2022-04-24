@@ -1,6 +1,8 @@
 package game
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -9,148 +11,205 @@ import (
 )
 
 type Game struct {
-	Players [2]Player
-	Bullets []Bullet
+	Players [2]*Player
+	Bullets []*Bullet
 }
 
-func readyUp(wg sync.WaitGroup, connection *websocket.Conn) {
-    wg.Add(1)
-    go func() {
-        connection.WriteJSON(CreateMessage(ReadyUp))
-        var resp GameMessage;
-        connection.ReadJSON(&resp)
+type Debug struct {
+    Time int64
+    Place string
+}
 
-        if resp.Type != ReadyUp {
-            log.Fatalf("I am intentionally blowing up this program because this is completely wrong.")
+func readyUp(wg *sync.WaitGroup, connection *websocket.Conn) {
+	go func() {
+        defer func() {
+            wg.Done()
+        }()
+
+		connection.WriteJSON(CreateMessage(ReadyUp))
+		var resp GameMessage
+        msgType, msg, err := connection.ReadMessage()
+
+        if msgType != websocket.TextMessage {
+			log.Fatalf("WHERE AM I??")
         }
 
-        wg.Done()
-    }()
+        if err != nil {
+			log.Fatalf("I think that I have died and gone to JSON")
+        }
+
+        json.Unmarshal(msg, &resp)
+		if resp.Type != ReadyUp {
+			log.Fatalf("I am intentionally blowing up this program because this is completely wrong.")
+		}
+	}()
 
 }
 
 type NamedGameMessage struct {
-    msg GameMessage
-    name byte
+	msg  GameMessage
+	name byte
 }
 
 func listenForFires(channel chan<- NamedGameMessage, c *websocket.Conn, name byte) {
-    go func() {
-        defer c.Close()
-        for {
-            var msg GameMessage
-            err := c.ReadJSON(&msg)
+	go func() {
+		for {
+			var cmd GameMessage
+            msgType, msg, err := c.ReadMessage()
 
             if err != nil {
-                log.Println("We just had a json error while ready from socket???????? WDH")
+                return
             }
 
-            if msg.Type == Fire {
-                channel <- NamedGameMessage {msg, name}
+            if msgType != websocket.TextMessage {
+                continue
+            }
+
+            json.Unmarshal(msg, &cmd)
+
+			if cmd.Type == Fire {
+                channel <- NamedGameMessage{msg: cmd, name: name}
+			} else {
+                log.Fatalf("WHAT IS HAPPENING TO ME ???? %+v\n", cmd)
+            }
+		}
+	}()
+}
+
+func checkBulletCollisions(g *Game) {
+    loop_me_daddy: for idx1 := 0; idx1 < len(g.Bullets); {
+        bullet := g.Bullets[idx1]
+        for idx2 := idx1 + 1; idx2 < len(g.Bullets); idx2 += 1 {
+            bullet2 := g.Bullets[idx2]
+            if bullet.Geo.HasCollision(&bullet2.Geo) {
+                // that is also very crappy code.  Why would I ever do this...
+                g.Bullets = append(g.Bullets[:idx2], g.Bullets[(idx2 + 1):]...)
+                g.Bullets = append(g.Bullets[:idx1], g.Bullets[(idx1 + 1):]...)
+                break loop_me_daddy
             }
         }
-    }()
+
+        idx1 += 1
+    }
 }
 
 func RunGame(connections chan *websocket.Conn) {
 
-    for {
-        playerA := <- connections
-        playerB := <- connections
+	for {
+		playerA := <-connections
+		playerB := <-connections
 
-        go func() {
-            // 1. Wait for ready
-            wg := sync.WaitGroup{}
-            readyUp(wg, playerA)
-            readyUp(wg, playerB)
-            wg.Wait()
+		go func() {
+            defer playerA.Close()
+            defer playerB.Close()
 
-            // 2.  Game state
-            game := Game {
-                Players: [2]Player {
-                    NewPlayer(Vector2D{2500.0, 0.0}, Vector2D{-1.0, 0.0}, 180),
-                    NewPlayer(Vector2D{-2500.0, 0.0}, Vector2D{-1.0, 0.0}, 300),
-                },
-                Bullets: []Bullet{},
+            starting_of_game := time.Now()
+            hack := []Debug{}
+
+			// 1. Wait for ready
+			wg := sync.WaitGroup{}
+            wg.Add(1)
+            wg.Add(1)
+			readyUp(&wg, playerA)
+			readyUp(&wg, playerB)
+			wg.Wait()
+
+			// 2.  Game state
+			game := Game{
+				Players: [2]*Player{
+					NewPlayer(Vector2D{2500.0, 0.0}, Vector2D{-1.0, 0.0}, 180),
+					NewPlayer(Vector2D{-2500.0, 0.0}, Vector2D{1.0, 0.0}, 300),
+				},
+				Bullets: []*Bullet{},
+			}
+
+			// 3. create stats and play message
+			stats := NewGameStat()
+
+            playMsg, err := json.Marshal(CreateMessage(Play))
+            if err != nil {
+                log.Fatalf("WHY WOULD THIS EVER DIE ON ME???")
             }
 
-            // 3. create stats and play message
-            stats := NewGameStat()
+			playerA.WriteMessage(websocket.TextMessage, playMsg)
+			playerB.WriteMessage(websocket.TextMessage, playMsg)
 
-            playerA.WriteJSON(CreateMessage(Fire))
-            playerB.WriteJSON(CreateMessage(Fire))
+			// Step 4.
+			AddActiveGame()
+			fires := make(chan NamedGameMessage, 10)
+			listenForFires(fires, playerA, 'a')
+			listenForFires(fires, playerB, 'b')
 
-            // Step 4.
-            AddActiveGame()
-            fires := make(chan NamedGameMessage, 10)
-            listenForFires(fires, playerA, 'a')
-            listenForFires(fires, playerB, 'b')
+			// Steps 5. The rust version has a tokio::select
+			ticker := time.NewTicker(time.Millisecond * 16)
+			last_start := time.Now()
 
-            // Steps 5. The rust version has a tokio::select
-            ticker := time.NewTicker(time.Millisecond * 16)
-            last_start := time.Now()
+			var winner *websocket.Conn
+			var loser *websocket.Conn
 
-            var winner Player
-            var loser Player
-
-            game_me_daddy: for {
-                select {
-                case fire := <- fires:
-                    player := game.Players[0]
-                    if fire.name == 'b' {
-                        player = game.Players[1]
-                    }
-                    game.Bullets = append(game.Bullets, CreateBulletFromPlayer(&player, 1.0))
-                case <- ticker.C:
-                    // 6. part 1 : calculate the time difference between each loop.
-                    diff := time.Since(last_start).Microseconds()
-                    last_start = time.Now()
-
-                    // 6. do all the collision / updating
-                    for _, bullet := range game.Bullets {
-                        UpdateBullet(&bullet, diff)
+		game_me_daddy:
+			for {
+				select {
+				case fire := <-fires:
+					player := game.Players[0]
+					if fire.name == 'b' {
+						player = game.Players[1]
                     }
 
-                    // TODO: I may need to replace this because it sucks
-                    loop_me_daddy: for idx1 := 0; idx1 < len(game.Bullets); idx1 += 1 {
-                        bullet := game.Bullets[idx1]
-                        for idx2 := idx1 + 1; idx2 < len(game.Bullets); idx2 += 1 {
-                            bullet2 := game.Bullets[idx2]
-                            if bullet.Geo.HasCollision(&bullet2.Geo) {
-                                last := game.Bullets[len(game.Bullets) - 1]
-                                second := game.Bullets[len(game.Bullets) - 2]
-
-                                game.Bullets[idx1] = last;
-                                game.Bullets[idx2] = second;
-
-                                game.Bullets = game.Bullets[:len(game.Bullets) - 2]
-                                break loop_me_daddy
-                            }
-                        }
+                    if PlayerFire(player) {
+                        game.Bullets = append(game.Bullets, CreateBulletFromPlayer(player, 1.0))
+                        hack = append(hack, Debug{
+                            int64(time.Since(starting_of_game).Milliseconds()),
+                            fmt.Sprintf("fire%v", fire.name),
+                        })
                     }
 
-                    for _, bullet := range game.Bullets {
-                        if game.Players[0].Geo.HasCollision(&bullet.Geo) {
-                            winner = game.Players[1]
-                            loser = game.Players[0]
-                            break game_me_daddy;
-                        }
-                        if game.Players[1].Geo.HasCollision(&bullet.Geo) {
-                            winner = game.Players[0]
-                            loser = game.Players[1]
-                            break game_me_daddy;
-                        }
-                    }
+				case <-ticker.C:
+					// 6. part 1 : calculate the time difference between each loop.
+					diff := time.Since(last_start).Microseconds()
+					last_start = time.Now()
 
-                    stats.AddDelta(diff);
+					// 6. do all the collision / updating
+                    for i := 0; i < len(game.Bullets); i += 1 {
+						UpdateBullet(game.Bullets[i], diff)
+					}
+
+                    checkBulletCollisions(&game)
+
+                    for i := 0; i < len(game.Bullets); i += 1 {
+						if game.Players[0].Geo.HasCollision(&game.Bullets[i].Geo) {
+							winner = playerA
+							loser = playerB
+							break game_me_daddy
+						}
+						if game.Players[1].Geo.HasCollision(&game.Bullets[i].Geo) {
+							winner = playerB
+							loser = playerA
+							break game_me_daddy
+						}
+					}
+
+					stats.AddDelta(diff)
+				}
+			}
+
+			// Part 7. Send out the winner / loser message and close down the
+			// suckets
+			winnerMsg := CreateWinnerMessage(stats)
+			loserMsg := CreateLoserMessage()
+
+            winner.WriteJSON(winnerMsg)
+            loser.WriteJSON(loserMsg)
+
+            if stats.FrameBuckets[0] > 1000 {
+                log.Printf("COLLISIONS\n")
+                for _, debug := range hack {
+                    log.Printf("%+v\n", debug)
                 }
+                log.Println()
             }
 
-            // Part 7. Send out the winner / loser message and close down the
-            // suckets
-
-        }()
-
-    }
+            RemoveActiveGame()
+		}()
+	}
 }
-
