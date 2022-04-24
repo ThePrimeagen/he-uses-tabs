@@ -1,4 +1,4 @@
-FROM golang:1.18rc1
+FROM golang:1.18.1
 WORKDIR /app
 COPY cmd cmd
 COPY pkg pkg
