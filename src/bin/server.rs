@@ -215,7 +215,6 @@ impl Into<String> for GameStats {
     }
 }
 
-
 #[tokio::main]
 async fn main() {
 	let socket_addr = "0.0.0.0:42069";
@@ -401,11 +400,11 @@ async fn main() {
 					.unwrap();
 					match winner {
 						b'a' => {
-							sinka.send(Message::Text(winner_msg)).await.unwrap();
-							sinkb.send(Message::Text(loser_msg)).await.unwrap();
+							sinka.send(message::text(winner_msg)).await.unwrap();
+							sinkb.send(message::text(loser_msg)).await.unwrap();
 						}
 						b'b' => {
-							sinkb.send(Message::Text(winner_msg)).await.unwrap();
+							sinkb.send(message::text(winner_msg)).await.unwrap();
 							sinka.send(Message::Text(loser_msg)).await.unwrap();
 						}
 						_ => (),
