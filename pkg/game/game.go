@@ -16,10 +16,10 @@ func readyUp(wg sync.WaitGroup, connection *websocket.Conn) {
     wg.Add(1)
     go func() {
         connection.WriteJSON(CreateMessage(ReadyUp))
-        var resp MessageEnvelope;
+        var resp GameMessage;
         connection.ReadJSON(&resp)
 
-        if resp.Message.Type != ReadyUp {
+        if resp.Type != ReadyUp {
             log.Fatalf("I am intentionally blowing up this program because this is completely wrong.")
         }
 
@@ -50,6 +50,11 @@ func RunGame(connections chan *websocket.Conn) {
                 Bullets: []Bullet{},
             }
 
+            // 3. create stats and play message
+            stats := NewGameStat()
+
+            playerA.WriteJSON(CreateMessage(Fire))
+            playerB.WriteJSON(CreateMessage(Fire))
 
         }()
     }
